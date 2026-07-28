@@ -1,8 +1,8 @@
 # SealedCast
 
-Sealed Casts adds iExec Nox-powered confidential audience gating to OpenCast.
-Creators encrypt a cast for up to five wallet addresses; readers privately bind
-up to five wallets and see qualifying casts automatically.
+SealedCast adds iExec Nox-powered confidential access rules to OpenCast.
+Creators choose real wallet, Discord, and Farcaster requirements. Readers link
+their identities once and see qualifying casts automatically.
 
 ## Live application
 
@@ -18,25 +18,30 @@ Nox relayer run on AWS and are deployed with
 
 ## Qualification identities
 
-Readers can privately bind five wallets according to how they use them:
-
-1. Primary wallet
-2. Collectibles wallet
-3. Token wallet
-4. DeFi wallet
-5. Additional wallet
+Readers can privately bind up to five wallets. They form one qualification set,
+so any linked wallet can satisfy a token, NFT, DeFi, or transaction rule. Wallet
+slots are not assigned to asset categories.
 
 Each binding requires a short-lived ownership signature. The signature moves no
 funds, the relayer sponsors the Sepolia transaction, and the address is stored as
-a Nox encrypted handle.
+a Nox encrypted handle on-chain and encrypted at rest for source checks.
 
-The current deployed registry supports confidential matching against exact
-wallet addresses. The next qualification-engine layer extends the same flow to
-verifiable wallet holdings and activity, Discord membership and account facts,
-and Farcaster relationship and account facts. A creator can choose whether the
-requirement is shown publicly or remains hidden. The project does not present
-those additional rule types as active until their source checks and Nox access
-path work end to end.
+Creators can combine up to five requirements with `ALL` or `ANY` logic:
+
+- minimum ERC-20 balance across all linked wallets;
+- NFT collection ownership across all linked wallets;
+- Discord server membership, role, or account age;
+- Farcaster follow relationship, account age, or follower count.
+
+The backend verifies each source, encrypts the single eligibility result for the
+registry, and signs a short-lived attestation tied to the cast policy commitment,
+reader, FID, nonce, and expiry. Nox selects either the encrypted content key or
+encrypted zero without publishing the decision. The creator can show the rule
+summary publicly or keep it hidden.
+
+Discord uses OAuth scopes `identify`, `guilds`, and `guilds.members.read`.
+Access and refresh tokens are encrypted with AES-256-GCM and never returned to
+the browser after the callback.
 
 This project is built on [OpenCast](https://github.com/stephancill/opencast),
 using upstream commit [`e8343c07`](https://github.com/stephancill/opencast/commit/e8343c07)
@@ -47,9 +52,9 @@ license, and a summary of the privacy features added here.
 ### Ethereum Sepolia deployment
 
 The live SealedCast registry is deployed on Ethereum Sepolia at
-[`0x3c3c34f06e50e734d041338a2a200193384bee24`](https://sepolia.etherscan.io/address/0x3c3c34f06e50e734d041338a2a200193384bee24).
+[`0xd9067eaa6905dd7ec9ed037d835881a24a92e107`](https://sepolia.etherscan.io/address/0xd9067eaa6905dd7ec9ed037d835881a24a92e107).
 Its deployment transaction is
-[`0x3536f781f9c6cfe564a7ff72ede76a325d1f40268d3e62340101ab21e943d33c`](https://sepolia.etherscan.io/tx/0x3536f781f9c6cfe564a7ff72ede76a325d1f40268d3e62340101ab21e943d33c).
+[`0x37ad645ec0ca3a61e87a7a8ea4121f138aab6d65594b7f102130105be4471c0e`](https://sepolia.etherscan.io/tx/0x37ad645ec0ca3a61e87a7a8ea4121f138aab6d65594b7f102130105be4471c0e).
 
 ```bash
 export SEPOLIA_RPC_URL="https://..."

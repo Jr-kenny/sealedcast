@@ -22,9 +22,10 @@ describe('Discord token encryption', () => {
 
   it('rejects a modified encrypted token', () => {
     const encrypted = encryptDiscordToken('discord-access-token');
-    const last = encrypted.at(-1) === 'a' ? 'b' : 'a';
+    const [iv, tag, ciphertext] = encrypted.split('.');
+    const changed = tag[0] === 'a' ? 'b' : 'a';
     expect(() =>
-      decryptDiscordToken(`${encrypted.slice(0, -1)}${last}`)
+      decryptDiscordToken(`${iv}.${changed}${tag.slice(1)}.${ciphertext}`)
     ).toThrow();
   });
 });

@@ -1,36 +1,38 @@
 import {
   createPublicClient,
   getAddress,
-  hexToBigInt,
   http,
   isAddress,
   parseEventLogs,
-  type Address,
   type Hex
 } from 'viem';
 import { sepolia } from 'viem/chains';
 import { sealedCastRegistryAbi } from '@contracts/sealed-cast-registry';
-import type { SealedPolicyVisibility } from '@lib/types/sealed-cast';
+import type {
+  SealedAccessPolicy,
+  SealedPolicyVisibility
+} from '@lib/types/sealed-cast';
 import {
   createSealedAccessAuthorization,
   type AuthorizationIdentity
 } from './access-authorization';
 import { encryptSealedCast, sealedContentKeyToUint256 } from './crypto';
 import { createSealedReaderWalletClient } from './reader-identity';
+import { policyCommitment } from './policy';
 
 export async function createWalletSealedCast({
   fid,
   plaintext,
   publicHint,
   policyVisibility,
-  audienceWallets,
+  policy,
   ...identity
 }: {
   fid: string;
   plaintext: string;
   publicHint: string;
   policyVisibility: SealedPolicyVisibility;
-  audienceWallets: Address[];
+  policy: SealedAccessPolicy;
 } & AuthorizationIdentity): Promise<string> {
   const configured = process.env.NEXT_PUBLIC_SEALED_CAST_REGISTRY_ADDRESS;
   if (!configured || !isAddress(configured)) {
@@ -59,16 +61,12 @@ export async function createWalletSealedCast({
   const { createViemHandleClient } = await import('@iexec-nox/handle');
   const handleClient = await createViemHandleClient(walletClient);
   const { envelope, contentKey } = await encryptSealedCast(plaintext);
-  const [encryptedKey, ...encryptedAudience] = await Promise.all([
-    handleClient.encryptInput(
-      sealedContentKeyToUint256(contentKey),
-      'uint256',
-      registry
-    ),
-    ...audienceWallets.map((wallet) =>
-      handleClient.encryptInput(hexToBigInt(wallet), 'uint256', registry)
-    )
-  ]);
+  const encryptedKey = await handleClient.encryptInput(
+    sealedContentKeyToUint256(contentKey),
+    'uint256',
+    registry
+  );
+  const policyHash = policyCommitment(policy);
 
   const txHash = await walletClient.writeContract({
     address: registry,
@@ -79,10 +77,9 @@ export async function createWalletSealedCast({
       'sealedcast://database',
       onchainPublicHint,
       policyVisibility === 'public',
+      policyHash,
       encryptedKey.handle as Hex,
-      encryptedKey.handleProof as Hex,
-      encryptedAudience.map((item) => item.handle as Hex),
-      encryptedAudience.map((item) => item.handleProof as Hex)
+      encryptedKey.handleProof as Hex
     ]
   });
   const publicClient = createPublicClient({
@@ -112,7 +109,9 @@ export async function createWalletSealedCast({
       authorization,
       envelope,
       publicHint: onchainPublicHint,
-      policyVisibility
+      policyVisibility,
+      policy,
+      policyHash
     })
   });
   if (!response.ok) {

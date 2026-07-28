@@ -28,13 +28,17 @@ import { Loading } from '../ui/loading';
 import { ImagePreview } from './image-preview';
 import { InputForm, fromTop } from './input-form';
 import { InputOptions } from './input-options';
-import {
-  parseAudienceWallets,
-  SealedAudienceComposer
-} from '@components/sealed-cast/sealed-audience-composer';
+import { SealedAudienceComposer } from '@components/sealed-cast/sealed-audience-composer';
 import { createWalletSealedCast } from '@lib/sealed-casts/create';
+import {
+  publicPolicySummary,
+  validateSealedAccessPolicy
+} from '@lib/sealed-casts/policy';
 import { sealedCastReferenceUrl } from '@lib/sealed-casts/reference';
-import type { SealedPolicyVisibility } from '@lib/types/sealed-cast';
+import type {
+  SealedAccessPolicy,
+  SealedPolicyVisibility
+} from '@lib/types/sealed-cast';
 
 type InputProps = {
   modal?: boolean;
@@ -109,10 +113,12 @@ export function Input({
   const [loading, setLoading] = useState(false);
   const [visited, setVisited] = useState(false);
   const [sealed, setSealed] = useState(false);
-  const [sealedHint, setSealedHint] = useState('Members-only cast');
   const [sealedPolicyVisibility, setSealedPolicyVisibility] =
     useState<SealedPolicyVisibility>('public');
-  const [audienceText, setAudienceText] = useState('');
+  const [sealedPolicy, setSealedPolicy] = useState<SealedAccessPolicy>({
+    mode: 'all',
+    rules: []
+  });
 
   const [embedUrls, setEmbedUrls] = useState<string[]>([]); // URLs to be fetched
   const [embeds, setEmbeds] = useState<ExternalEmbed[]>([]); // Fetched embeds
@@ -218,19 +224,19 @@ export function Input({
         return;
       }
       try {
-        const audienceWallets = parseAudienceWallets(audienceText);
-        if (audienceWallets.length === 0) {
-          throw new Error('Add at least one qualified wallet');
-        }
+        validateSealedAccessPolicy(sealedPolicy);
         const identity = user.keyPair
           ? { keyPair: user.keyPair }
           : { neynarSignerUuid: user.neynarSignerUuid! };
         sealedCastId = await createWalletSealedCast({
           fid: userId,
           plaintext: rawText,
-          publicHint: sealedHint.trim() || 'Private cast',
+          publicHint:
+            sealedPolicyVisibility === 'public'
+              ? publicPolicySummary(sealedPolicy)
+              : '',
           policyVisibility: sealedPolicyVisibility,
-          audienceWallets,
+          policy: sealedPolicy,
           ...identity
         });
       } catch (reason) {
@@ -282,7 +288,7 @@ export function Input({
     );
     const sealedPublicText =
       sealedPolicyVisibility === 'public'
-        ? sealedHint.trim() || 'Restricted access'
+        ? publicPolicySummary(sealedPolicy)
         : 'Sealed Cast · Private requirements';
 
     // setLoading(false);
@@ -459,8 +465,7 @@ export function Input({
     setEmbeds([]);
     setIgnoredEmbedUrls([]);
     setSealed(false);
-    setSealedHint('Members-only cast');
-    setAudienceText('');
+    setSealedPolicy({ mode: 'all', rules: [] });
 
     inputRef.current?.blur();
   };
@@ -693,13 +698,11 @@ export function Input({
           {!reply && (
             <SealedAudienceComposer
               enabled={sealed}
-              publicHint={sealedHint}
               policyVisibility={sealedPolicyVisibility}
-              audienceText={audienceText}
+              policy={sealedPolicy}
               onEnabledChange={setSealed}
-              onPublicHintChange={setSealedHint}
               onPolicyVisibilityChange={setSealedPolicyVisibility}
-              onAudienceTextChange={setAudienceText}
+              onPolicyChange={setSealedPolicy}
             />
           )}
 

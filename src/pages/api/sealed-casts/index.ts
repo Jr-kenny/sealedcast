@@ -3,15 +3,23 @@ import { prisma } from '@lib/prisma';
 import type { SealedAccessAuthorization } from '@lib/sealed-casts/access-authorization';
 import { authorizeSealedCastRequest } from '@lib/sealed-casts/server-authorization';
 import type {
+  SealedAccessPolicy,
   SealedCastEnvelope,
   SealedPolicyVisibility
 } from '@lib/types/sealed-cast';
+import {
+  policyCommitment,
+  validateSealedAccessPolicy
+} from '@lib/sealed-casts/policy';
+import type { Hex } from 'viem';
 
 type Body = {
   authorization: SealedAccessAuthorization;
   envelope: SealedCastEnvelope;
   publicHint: string;
   policyVisibility: SealedPolicyVisibility;
+  policy: SealedAccessPolicy;
+  policyHash: Hex;
 };
 
 export default async function handle(
@@ -33,8 +41,16 @@ export default async function handle(
     res.status(401).json({ error: 'Invalid creator authorization' });
     return;
   }
+  let validPolicy = false;
+  try {
+    validateSealedAccessPolicy(body.policy);
+    validPolicy = policyCommitment(body.policy) === body.policyHash;
+  } catch {
+    validPolicy = false;
+  }
   if (
     !body.envelope ||
+    !validPolicy ||
     !['public', 'hidden'].includes(body.policyVisibility) ||
     typeof body.publicHint !== 'string' ||
     body.publicHint.length > 120 ||
@@ -49,7 +65,11 @@ export default async function handle(
       creator_fid: BigInt(auth.fid),
       encrypted_content: body.envelope,
       public_hint: body.publicHint,
-      audience_policy: { visibility: body.policyVisibility }
+      audience_policy: {
+        visibility: body.policyVisibility,
+        policy: body.policy,
+        commitment: body.policyHash
+      }
     }
   });
   res.status(201).json({ result: { id: auth.castId } });

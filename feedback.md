@@ -2,11 +2,12 @@
 
 ## Project context
 
-OpenCast Sealed Casts adds confidential audience gating to the existing
-open-source Farcaster client. Creators publish AES-256-GCM encrypted content and
-define an audience using Ethereum wallet addresses. Readers privately bind up to
-five qualification wallets to their Farcaster identity. iExec Nox compares both
-sides without exposing the wallet lists or the result on-chain.
+SealedCast adds confidential rule-based access to the existing open-source
+OpenCast Farcaster client. Creators publish AES-256-GCM encrypted content and
+combine wallet, Discord, and Farcaster requirements. Readers privately bind up
+to five wallets and connect social identities once. Source checks produce one
+encrypted eligibility result, and iExec Nox releases the content key without
+exposing that decision on-chain.
 
 - Application: OpenCast
 - Feature: Sealed Casts
@@ -28,14 +29,14 @@ We used:
 ### Encrypted handles compose naturally
 
 The handle model is a strong fit for reusable private identity. A qualification
-wallet is encrypted once, stored as an `euint256`, and reused across many access
-checks. This prevents creators from learning every wallet associated with a
-Farcaster account.
+wallet is encrypted once and stored as an `euint256`. The access evaluator checks
+real source facts and encrypts the final eligibility value for the registry.
+Creators never receive a reader's linked wallet list.
 
 ### Confidential selection prevents access-result leakage
 
-The registry accumulates an encrypted result with `Nox.select`. A qualified
-reader receives the encrypted content key; an unqualified reader receives an
+The registry uses `Nox.select` with the encrypted eligibility value. A qualified
+reader receives the encrypted content key, and an unqualified reader receives
 encrypted zero. Both requests have the same public transaction shape, so the
 contract does not emit a public eligibility boolean.
 
@@ -60,13 +61,13 @@ and mental models can lead developers to expect `contracts/Nox.sol`. A
 copy-pasteable installation and import section in the package README would avoid
 this initial failure.
 
-### Boolean composition
+### Attested external source checks
 
-The SDK exposes encrypted comparisons and typed `select`, but no direct
-`select(ebool, ebool, ebool)` or obvious boolean OR helper. We accumulated the
-encrypted content-key result directly instead. That works, but an encrypted
-boolean-composition example would make multi-condition policies easier to
-design.
+Token balances and social relationships live outside the Nox contract. We used
+a signed, expiring eligibility attestation whose encrypted handle is bound to a
+policy commitment, reader, FID, and nonce. An official pattern for bringing
+fresh public-protocol facts into a confidential decision would help teams avoid
+designing this boundary independently.
 
 ### Network configuration
 
@@ -117,9 +118,8 @@ failure.
 
 ## Overall assessment
 
-Nox enables a privacy property that cannot be achieved with conventional
-encrypted messaging alone: a contract can enforce audience membership without
-publishing the audience wallets or a readable eligibility result. The core
-primitives are effective. The biggest opportunity is documentation that joins
-the Solidity and JavaScript SDKs into one current, network-specific,
-end-to-end example.
+Nox enables a privacy property that conventional encrypted messaging cannot
+provide alone. A contract can enforce an access result without publishing a
+readable eligibility value. The core primitives are effective. The biggest
+opportunity is documentation that joins the Solidity and JavaScript SDKs into
+one current, network-specific, end-to-end example.

@@ -214,3 +214,14 @@ model sealed_oauth_states {
 
   @@index([expires_at])
 }
+
+model sealed_wallet_links {
+  fid               BigInt
+  slot              Int
+  encrypted_address String
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime @default(now()) @db.Timestamptz(6)
+
+  @@id([fid, slot])
+  @@index([fid])
+}

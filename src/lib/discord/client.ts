@@ -15,6 +15,11 @@ export type DiscordUser = {
   avatar: string | null;
 };
 
+export type DiscordGuildMember = {
+  joined_at: string;
+  roles: string[];
+};
+
 function discordConfig(): {
   clientId: string;
   clientSecret: string;
@@ -60,6 +65,24 @@ export async function exchangeDiscordCode(
   return response.json() as Promise<DiscordTokenResponse>;
 }
 
+export async function refreshDiscordToken(
+  refreshToken: string
+): Promise<DiscordTokenResponse> {
+  const { clientId, clientSecret } = discordConfig();
+  const response = await fetch(`${DISCORD_API}/oauth2/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken
+    })
+  });
+  if (!response.ok) throw new Error('Discord authorization expired');
+  return response.json() as Promise<DiscordTokenResponse>;
+}
+
 export async function fetchDiscordUser(
   accessToken: string
 ): Promise<DiscordUser> {
@@ -83,6 +106,21 @@ export async function revokeDiscordToken(token: string): Promise<void> {
     })
   });
   if (!response.ok) throw new Error('Discord token could not be revoked');
+}
+
+export async function fetchCurrentDiscordGuildMember(
+  accessToken: string,
+  guildId: string
+): Promise<DiscordGuildMember | null> {
+  const response = await fetch(
+    `${DISCORD_API}/users/@me/guilds/${guildId}/member`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    }
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error('Discord membership could not be checked');
+  return response.json() as Promise<DiscordGuildMember>;
 }
 
 export function discordAvatarUrl(user: DiscordUser): string | null {

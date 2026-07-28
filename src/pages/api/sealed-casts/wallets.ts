@@ -18,6 +18,8 @@ import { sealedCastRegistryAbi } from '@contracts/sealed-cast-registry';
 import type { SealedAccessAuthorization } from '@lib/sealed-casts/access-authorization';
 import { authorizeSealedCastRequest } from '@lib/sealed-casts/server-authorization';
 import { walletOwnershipMessage } from '@lib/sealed-casts/wallet-binding';
+import { encryptIdentityValue } from '@lib/sealed-casts/identity-crypto';
+import { prisma } from '@lib/prisma';
 
 type Action = 'list' | 'bind' | 'unbind';
 type Body = {
@@ -251,6 +253,24 @@ export default async function handle(
       });
     }
     await publicClient.waitForTransactionReceipt({ hash: txHash });
+    if (body.action === 'bind') {
+      await prisma.sealed_wallet_links.upsert({
+        where: { fid_slot: { fid, slot: body.slot! } },
+        create: {
+          fid,
+          slot: body.slot!,
+          encrypted_address: encryptIdentityValue(verifiedWallet!)
+        },
+        update: {
+          encrypted_address: encryptIdentityValue(verifiedWallet!),
+          updated_at: new Date()
+        }
+      });
+    } else {
+      await prisma.sealed_wallet_links.deleteMany({
+        where: { fid, slot: body.slot! }
+      });
+    }
     const active = await publicClient.readContract({
       address: registry,
       abi: sealedCastRegistryAbi,

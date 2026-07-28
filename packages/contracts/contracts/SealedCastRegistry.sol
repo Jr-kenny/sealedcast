@@ -8,9 +8,11 @@ import "encrypted-types/EncryptedTypes.sol";
 
 contract SealedCastRegistry is EIP712 {
     uint8 public constant MAX_WALLETS = 5;
-    uint8 public constant MAX_AUDIENCE_WALLETS = 5;
     bytes32 private constant WALLET_BINDING_TYPEHASH = keccak256(
         "WalletBinding(uint256 fid,uint8 slot,bytes32 encryptedWalletHandle,uint256 nonce,uint64 expiry)"
+    );
+    bytes32 private constant ACCESS_ATTESTATION_TYPEHASH = keccak256(
+        "AccessAttestation(uint256 castId,uint256 fid,address reader,bytes32 encryptedEligibilityHandle,bytes32 policyHash,uint256 nonce,uint64 expiry)"
     );
 
     struct QualificationWallets {
@@ -24,9 +26,8 @@ contract SealedCastRegistry is EIP712 {
         string encryptedContentUri;
         string publicHint;
         bool requirementIsPublic;
+        bytes32 policyHash;
         euint256 encryptedContentKey;
-        euint256[MAX_AUDIENCE_WALLETS] audience;
-        uint8 audienceWalletCount;
         bool exists;
     }
 
@@ -35,6 +36,7 @@ contract SealedCastRegistry is EIP712 {
     uint256 public nextCastId = 1;
     mapping(uint256 => address) public farcasterControllers;
     mapping(uint256 => uint256) public bindingNonces;
+    mapping(uint256 => mapping(address => uint256)) public accessNonces;
     mapping(uint256 => QualificationWallets) private qualificationWallets;
     mapping(uint256 => SealedCast) private sealedCasts;
     mapping(uint256 => mapping(address => euint256)) private readerKeyHandles;
@@ -53,7 +55,6 @@ contract SealedCastRegistry is EIP712 {
     error SlotEmpty();
     error InvalidAttestation();
     error AttestationExpired();
-    error InvalidAudience();
     error CastNotFound();
     error CastAlreadyExists();
 
@@ -121,15 +122,11 @@ contract SealedCastRegistry is EIP712 {
         string calldata encryptedContentUri,
         string calldata publicHint,
         bool requirementIsPublic,
+        bytes32 policyHash,
         externalEuint256 encryptedContentKey,
-        bytes calldata contentKeyProof,
-        externalEuint256[] calldata encryptedAudienceWallets,
-        bytes[] calldata audienceProofs
+        bytes calldata contentKeyProof
     ) external returns (uint256 castId) {
-        uint256 length = encryptedAudienceWallets.length;
-        if (length == 0 || length > MAX_AUDIENCE_WALLETS || length != audienceProofs.length) {
-            revert InvalidAudience();
-        }
+        if (policyHash == bytes32(0)) revert InvalidInput();
         castId = nextCastId++;
         SealedCast storage castData = sealedCasts[castId];
         castData.creator = msg.sender;
@@ -137,12 +134,9 @@ contract SealedCastRegistry is EIP712 {
         castData.encryptedContentUri = encryptedContentUri;
         castData.publicHint = publicHint;
         castData.requirementIsPublic = requirementIsPublic;
+        castData.policyHash = policyHash;
         castData.encryptedContentKey = Nox.fromExternal(encryptedContentKey, contentKeyProof);
-        castData.audienceWalletCount = uint8(length);
         castData.exists = true;
-        for (uint8 i; i < length; i++) {
-            castData.audience[i] = Nox.fromExternal(encryptedAudienceWallets[i], audienceProofs[i]);
-        }
         emit SealedCastCreated(castId, farcasterCastHash, msg.sender);
     }
 
@@ -155,23 +149,40 @@ contract SealedCastRegistry is EIP712 {
         emit FarcasterCastLinked(castId, farcasterCastHash);
     }
 
-    function requestAccessKey(uint256 castId, uint256 fid, address reader)
+    function requestAccessKey(
+        uint256 castId,
+        uint256 fid,
+        address reader,
+        externalEuint256 encryptedEligibility,
+        bytes calldata eligibilityProof,
+        uint64 expiry,
+        bytes calldata verifierSignature
+    )
         external onlyController(fid) returns (bytes32 resultHandle)
     {
         SealedCast storage castData = sealedCasts[castId];
         if (!castData.exists) revert CastNotFound();
-        euint256 result = Nox.toEuint256(0);
-        QualificationWallets storage wallets = qualificationWallets[fid];
-        for (uint8 i; i < MAX_WALLETS; i++) {
-            if (!wallets.active[i]) continue;
-            for (uint8 j; j < castData.audienceWalletCount; j++) {
-                result = Nox.select(
-                    Nox.eq(wallets.wallets[i], castData.audience[j]),
-                    castData.encryptedContentKey,
-                    result
-                );
-            }
+        if (block.timestamp > expiry) revert AttestationExpired();
+        euint256 eligibility = Nox.fromExternal(encryptedEligibility, eligibilityProof);
+        bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(
+            ACCESS_ATTESTATION_TYPEHASH,
+            castId,
+            fid,
+            reader,
+            externalEuint256.unwrap(encryptedEligibility),
+            castData.policyHash,
+            accessNonces[castId][reader],
+            expiry
+        )));
+        if (ECDSA.recover(digest, verifierSignature) != walletVerifier) {
+            revert InvalidAttestation();
         }
+        accessNonces[castId][reader]++;
+        euint256 result = Nox.select(
+            Nox.ne(eligibility, Nox.toEuint256(0)),
+            castData.encryptedContentKey,
+            Nox.toEuint256(0)
+        );
         Nox.allow(result, reader);
         readerKeyHandles[castId][reader] = result;
         emit AccessKeyRequested(castId, fid, reader);
@@ -192,7 +203,7 @@ contract SealedCastRegistry is EIP712 {
         string memory encryptedContentUri,
         string memory publicHint,
         bool requirementIsPublic,
-        uint8 audienceWalletCount
+        bytes32 policyHash
     ) {
         SealedCast storage castData = sealedCasts[castId];
         if (!castData.exists) revert CastNotFound();
@@ -202,7 +213,7 @@ contract SealedCastRegistry is EIP712 {
             castData.encryptedContentUri,
             castData.requirementIsPublic ? castData.publicHint : "",
             castData.requirementIsPublic,
-            castData.requirementIsPublic ? castData.audienceWalletCount : 0
+            castData.policyHash
         );
     }
 }

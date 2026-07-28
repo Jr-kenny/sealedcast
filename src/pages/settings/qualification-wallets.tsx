@@ -403,10 +403,10 @@ export default function QualificationWallets(): JSX.Element {
           })}
         </div>
         <p className='mt-5 text-xs text-light-secondary dark:text-dark-secondary'>
-          A rule checks all linked wallets. Any linked wallet can satisfy an NFT,
-          token, DeFi, or transaction requirement. The signature proves ownership
-          without moving funds, and SealedCast relays the Ethereum Sepolia
-          transaction.
+          A rule checks all linked wallets. Any linked wallet can satisfy an
+          NFT, token, DeFi, or transaction requirement. The signature proves
+          ownership without moving funds, and SealedCast relays the Ethereum
+          Sepolia transaction.
         </p>
       </section>
     </MainContainer>

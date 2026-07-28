@@ -15,6 +15,9 @@ import type { SealedAccessAuthorization } from '@lib/sealed-casts/access-authori
 import { authorizeSealedCastRequest } from '@lib/sealed-casts/server-authorization';
 import type { SealedCastEnvelope } from '@lib/types/sealed-cast';
 import { lockedMessageForPolicy } from '@lib/sealed-casts/visibility';
+import type { SealedAccessPolicy } from '@lib/types/sealed-cast';
+import { evaluateSealedPolicy } from '@lib/sealed-casts/evaluate-policy';
+import { policyCommitment } from '@lib/sealed-casts/policy';
 
 const ZERO = '0x0000000000000000000000000000000000000000';
 
@@ -48,6 +51,8 @@ export default async function handle(
   }
   const audiencePolicy = sealedCast.audience_policy as {
     visibility?: 'public' | 'hidden';
+    policy?: SealedAccessPolicy;
+    commitment?: Hex;
   };
   const lockedMessage = lockedMessageForPolicy(
     audiencePolicy.visibility,
@@ -57,12 +62,16 @@ export default async function handle(
     process.env.SEALED_CAST_REGISTRY_ADDRESS ||
     process.env.NEXT_PUBLIC_SEALED_CAST_REGISTRY_ADDRESS;
   const key = process.env.SEALED_CAST_RELAYER_PRIVATE_KEY as Hex | undefined;
-  if (!registryValue || !isAddress(registryValue) || !key) {
+  const verifierKey = (process.env.SEALED_CAST_ACCESS_VERIFIER_PRIVATE_KEY ||
+    process.env.SEALED_CAST_WALLET_VERIFIER_PRIVATE_KEY ||
+    key) as Hex | undefined;
+  if (!registryValue || !isAddress(registryValue) || !key || !verifierKey) {
     res.status(503).json({ error: 'Sepolia relayer is not configured' });
     return;
   }
   const registry = getAddress(registryValue);
   const relayer = privateKeyToAccount(key);
+  const verifier = privateKeyToAccount(verifierKey);
   const transport = http(process.env.SEPOLIA_RPC_URL);
   const publicClient = createPublicClient({ chain: sepolia, transport });
   const walletClient = createWalletClient({
@@ -89,27 +98,80 @@ export default async function handle(
     return;
   }
   const castId = BigInt(id);
-  let contentKeyHandle = await publicClient.readContract({
+  if (
+    !audiencePolicy.policy ||
+    !audiencePolicy.commitment ||
+    policyCommitment(audiencePolicy.policy) !== audiencePolicy.commitment
+  ) {
+    res.status(500).json({ error: 'Sealed cast policy is invalid' });
+    return;
+  }
+  const eligible = await evaluateSealedPolicy(fid, audiencePolicy.policy);
+  const { createViemHandleClient } = await import('@iexec-nox/handle');
+  const handleClient = await createViemHandleClient(walletClient);
+  const encryptedEligibility = await handleClient.encryptInput(
+    eligible ? 1n : 0n,
+    'uint256',
+    registry
+  );
+  const reader = getAddress(auth.reader);
+  const nonce = await publicClient.readContract({
+    address: registry,
+    abi: sealedCastRegistryAbi,
+    functionName: 'accessNonces',
+    args: [castId, reader]
+  });
+  const expiry = BigInt(Math.floor(Date.now() / 1000) + 300);
+  const verifierSignature = await verifier.signTypedData({
+    domain: {
+      name: 'SealedCastRegistry',
+      version: '1',
+      chainId: sepolia.id,
+      verifyingContract: registry
+    },
+    types: {
+      AccessAttestation: [
+        { name: 'castId', type: 'uint256' },
+        { name: 'fid', type: 'uint256' },
+        { name: 'reader', type: 'address' },
+        { name: 'encryptedEligibilityHandle', type: 'bytes32' },
+        { name: 'policyHash', type: 'bytes32' },
+        { name: 'nonce', type: 'uint256' },
+        { name: 'expiry', type: 'uint64' }
+      ]
+    },
+    primaryType: 'AccessAttestation',
+    message: {
+      castId,
+      fid,
+      reader,
+      encryptedEligibilityHandle: encryptedEligibility.handle as Hex,
+      policyHash: audiencePolicy.commitment,
+      nonce,
+      expiry
+    }
+  });
+  const hash = await walletClient.writeContract({
+    address: registry,
+    abi: sealedCastRegistryAbi,
+    functionName: 'requestAccessKey',
+    args: [
+      castId,
+      fid,
+      reader,
+      encryptedEligibility.handle as Hex,
+      encryptedEligibility.handleProof as Hex,
+      expiry,
+      verifierSignature
+    ]
+  });
+  await publicClient.waitForTransactionReceipt({ hash });
+  const contentKeyHandle = await publicClient.readContract({
     address: registry,
     abi: sealedCastRegistryAbi,
     functionName: 'getReaderKeyHandle',
-    args: [castId, getAddress(auth.reader)]
+    args: [castId, reader]
   });
-  if (contentKeyHandle === `0x${'0'.repeat(64)}`) {
-    const hash = await walletClient.writeContract({
-      address: registry,
-      abi: sealedCastRegistryAbi,
-      functionName: 'requestAccessKey',
-      args: [castId, fid, getAddress(auth.reader)]
-    });
-    await publicClient.waitForTransactionReceipt({ hash });
-    contentKeyHandle = await publicClient.readContract({
-      address: registry,
-      abi: sealedCastRegistryAbi,
-      functionName: 'getReaderKeyHandle',
-      args: [castId, getAddress(auth.reader)]
-    });
-  }
   res.status(200).json({
     status: 'granted',
     lockedMessage,
