@@ -1,0 +1,16 @@
+.git
+.github
+.next
+.vercel
+node_modules
+packages/contracts/artifacts
+packages/contracts/cache
+packages/contracts/node_modules
+coverage
+*.log
+.env
+.env.*
+!.env.dev.sample
+!.env.production.sample
+!.env.sample
+opencast-sealed-casts.bundle

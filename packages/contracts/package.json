@@ -1,0 +1,24 @@
+{
+  "name": "@sealed-cast/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "hardhat build",
+    "test": "hardhat test",
+    "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia"
+  },
+  "dependencies": {
+    "@iexec-nox/nox-protocol-contracts": "0.2.4",
+    "@openzeppelin/contracts": "^5.4.0",
+    "encrypted-types": "^0.0.4"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox-viem": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "hardhat": "^3.0.0",
+    "solc": "0.8.35",
+    "typescript": "^5.5.3",
+    "viem": "^2.38.0"
+  }
+}

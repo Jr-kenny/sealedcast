@@ -1,0 +1,17 @@
+:2283 {
+	reverse_proxy https://hub-grpc-api.neynar.com {
+		header_up Host {upstream_hostport}
+		header_up x-api-key {$NEYNAR_API_KEY}
+		transport http {
+			tls_server_name hub-grpc-api.neynar.com
+			versions 2
+		}
+	}
+}
+
+:8080 {
+	reverse_proxy https://hub-api.neynar.com {
+		header_up Host {upstream_hostport}
+		header_up x-api-key {$NEYNAR_API_KEY}
+	}
+}

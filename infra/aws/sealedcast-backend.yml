@@ -1,0 +1,177 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: SealedCast persistent backend host for the Farcaster indexer, PostgreSQL, Redis, and API
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+  InstanceType:
+    Type: String
+    Default: t3a.medium
+    AllowedValues:
+      - t2.small
+      - t3a.medium
+      - t3a.large
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+  RepositoryUrl:
+    Type: String
+    Default: https://github.com/Jr-kenny/sealedcast.git
+
+Resources:
+  BackendRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: sealedcast-backend-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: sealedcast-production-parameters
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/sealedcast/production
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/sealedcast/production/*
+      Tags:
+        - Key: Project
+          Value: SealedCast
+
+  BackendInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: sealedcast-backend-profile
+      Roles:
+        - !Ref BackendRole
+
+  BackendSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: HTTPS ingress for the SealedCast AWS API
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - Description: HTTPS API traffic
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - Description: Required package, chain RPC, Farcaster, and AWS access
+          IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: sealedcast-backend
+        - Key: Project
+          Value: SealedCast
+
+  BackendLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: sealedcast-backend
+      LaunchTemplateData:
+        ImageId: !Ref AmiId
+        InstanceType: !Ref InstanceType
+        IamInstanceProfile:
+          Arn: !GetAtt BackendInstanceProfile.Arn
+        SecurityGroupIds:
+          - !Ref BackendSecurityGroup
+        MetadataOptions:
+          HttpEndpoint: enabled
+          HttpTokens: required
+          HttpPutResponseHopLimit: 2
+        CreditSpecification:
+          CpuCredits: standard
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              DeleteOnTermination: true
+              Encrypted: true
+              VolumeSize: 40
+              VolumeType: gp3
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: sealedcast-backend
+              - Key: Project
+                Value: SealedCast
+              - Key: ManagedBy
+                Value: CloudFormation
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: sealedcast-backend
+              - Key: Project
+                Value: SealedCast
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            set -euo pipefail
+            dnf install -y docker git
+            systemctl enable --now docker
+            usermod -aG docker ec2-user
+            if [ ! -f /swapfile ]; then
+              fallocate -l 4G /swapfile
+              chmod 0600 /swapfile
+              mkswap /swapfile
+              swapon /swapfile
+              echo '/swapfile none swap sw 0 0' >> /etc/fstab
+            fi
+            install -d -m 0755 /usr/local/lib/docker/cli-plugins
+            curl -fsSL https://github.com/docker/compose/releases/download/v5.3.1/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+            chmod 0755 /usr/local/lib/docker/cli-plugins/docker-compose
+            curl -fsSL https://github.com/docker/buildx/releases/download/v0.34.1/buildx-v0.34.1.linux-amd64 -o /usr/local/lib/docker/cli-plugins/docker-buildx
+            chmod 0755 /usr/local/lib/docker/cli-plugins/docker-buildx
+            install -d -o ec2-user -g ec2-user -m 0755 /opt/sealedcast
+            if [ ! -d /opt/sealedcast/.git ]; then
+              sudo -u ec2-user git clone ${RepositoryUrl} /opt/sealedcast
+            fi
+
+  BackendInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      SubnetId: !Ref SubnetId
+      LaunchTemplate:
+        LaunchTemplateId: !Ref BackendLaunchTemplate
+        Version: !GetAtt BackendLaunchTemplate.LatestVersionNumber
+
+  BackendElasticIp:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: sealedcast-backend
+        - Key: Project
+          Value: SealedCast
+
+  BackendElasticIpAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt BackendElasticIp.AllocationId
+      InstanceId: !Ref BackendInstance
+
+Outputs:
+  InstanceId:
+    Value: !Ref BackendInstance
+  PublicIp:
+    Value: !Ref BackendElasticIp
+  SecurityGroupId:
+    Value: !Ref BackendSecurityGroup

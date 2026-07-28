@@ -1,0 +1,167 @@
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    env_file:
+      - ${SEALEDCAST_ENV_FILE:-.env.production}
+    ports:
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./infra/aws/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - sealedcast
+
+  api:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_FC_CLIENT_NAME: SealedCast
+        NEXT_PUBLIC_WALLETCONNECT_ID: ${NEXT_PUBLIC_WALLETCONNECT_ID}
+        NEXT_PUBLIC_NEYNAR_CLIENT_ID: ${NEXT_PUBLIC_NEYNAR_CLIENT_ID}
+        NEXT_PUBLIC_URL: ${NEXT_PUBLIC_URL}
+        NEXT_PUBLIC_SEPOLIA_RPC_URL: ${NEXT_PUBLIC_SEPOLIA_RPC_URL}
+        NEXT_PUBLIC_SEALED_CAST_REGISTRY_ADDRESS: ${NEXT_PUBLIC_SEALED_CAST_REGISTRY_ADDRESS}
+    restart: unless-stopped
+    env_file:
+      - ${SEALEDCAST_ENV_FILE:-.env.production}
+    environment:
+      DATABASE_URL: postgresql://indexer:${POSTGRES_PASSWORD}@postgres:5432/indexer
+      INDEXER_API_URL: http://lazy-indexer:3005
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+    expose:
+      - '3000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      lazy-indexer:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://localhost:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks:
+      - sealedcast
+
+  migrate:
+    image: postgres:16-alpine
+    restart: 'no'
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    command:
+      - sh
+      - -ec
+      - |
+        for migration in /migrations/*/migration.sql; do
+          psql --host=postgres --username=indexer --dbname=indexer \
+            --set=ON_ERROR_STOP=1 --file="$$migration"
+        done
+    volumes:
+      - ./prisma/migrations:/migrations:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sealedcast
+
+  lazy-indexer:
+    image: stephancill/lazy-indexer
+    restart: unless-stopped
+    env_file:
+      - ${SEALEDCAST_ENV_FILE:-.env.production}
+    environment:
+      DATABASE_URL: postgresql://indexer:${POSTGRES_PASSWORD}@postgres:5432/indexer
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      HUB_REST_URL: http://hub-proxy:8080
+      HUB_RPC: hub-proxy:2283
+      HUB_SSL: 'false'
+      WORKER_CONCURRENCY: ${INDEXER_WORKER_CONCURRENCY:-2}
+      LOG_LEVEL: info
+    expose:
+      - '3005'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      hub-proxy:
+        condition: service_started
+    networks:
+      - sealedcast
+
+  hub-proxy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    env_file:
+      - ${SEALEDCAST_ENV_FILE:-.env.production}
+    volumes:
+      - ./infra/aws/Caddy.hub-proxy:/etc/caddy/Caddyfile:ro
+    expose:
+      - '2283'
+      - '8080'
+    networks:
+      - sealedcast
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: indexer
+      POSTGRES_USER: indexer
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U indexer -d indexer']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - sealedcast
+
+  redis:
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD}
+      - --appendonly
+      - 'yes'
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" ping']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    networks:
+      - sealedcast
+
+volumes:
+  caddy-data:
+  caddy-config:
+  postgres-data:
+  redis-data:
+
+networks:
+  sealedcast:
+    driver: bridge
