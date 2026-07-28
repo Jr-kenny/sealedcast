@@ -11,8 +11,9 @@ import { useAuth } from '../../lib/context/auth-context';
 const menuLinks: MenuLinkProps[] = [
   {
     href: '/settings/qualification-wallets',
-    description: 'Privately bind up to five wallets for Sealed Cast access',
-    title: 'Qualification Wallets',
+    description:
+      'Connect Farcaster, Discord, and private qualification wallets',
+    title: 'Qualification identities',
     iconName: 'ShieldCheckIcon'
   },
   {
