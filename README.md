@@ -6,6 +6,8 @@ SealedCast lets a creator publish an encrypted cast whose content opens only for
 
 The public Farcaster cast contains a locked preview and a SealedCast link. The plaintext stays encrypted, and eligible readers open it inside the normal feed without disclosing their linked wallets to the creator.
 
+**Hackathon reviewers:** read the detailed [iExec Nox integration feedback](feedback.md), inspect the [live application](https://sealedcast.vercel.app), and review the [Sepolia contract](https://sepolia.etherscan.io/address/0xbc16dec22be4b109dab6a830b32c95549e2e6cda).
+
 ## Why this exists
 
 Farcaster is public by design. That makes it composable, but it gives creators no native way to share one cast with a qualified audience while keeping both the content and the access decision private.
@@ -119,6 +121,7 @@ Work completed for SealedCast includes:
 - PostgreSQL persistence, AWS deployment automation, tests, and production documentation.
 
 See [UPSTREAM.md](UPSTREAM.md) for exact attribution and license details.
+The required developer feedback is available directly at [feedback.md](feedback.md).
 
 ## Run locally
 
