@@ -1,12 +1,7 @@
 import type { GetServerSideProps } from 'next';
 import Link from 'next/link';
 import { SEO } from '@components/common/seo';
-
-type SealedCastPublicMetadata = {
-  id: string;
-  creatorFid: string;
-  lockedMessage: string;
-};
+import type { SealedCastPublicMetadata } from '@lib/types/sealed-cast';
 
 type Props = {
   metadata: SealedCastPublicMetadata;

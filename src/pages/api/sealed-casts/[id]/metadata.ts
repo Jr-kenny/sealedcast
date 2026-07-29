@@ -1,12 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { prisma } from '@lib/prisma';
 import { lockedMessageForPolicy } from '@lib/sealed-casts/visibility';
-
-export type SealedCastPublicMetadata = {
-  id: string;
-  creatorFid: string;
-  lockedMessage: string;
-};
+import type { SealedCastPublicMetadata } from '@lib/types/sealed-cast';
 
 export default async function handle(
   req: NextApiRequest,

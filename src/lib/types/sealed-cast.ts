@@ -37,6 +37,12 @@ export type SealedAccessPolicy = {
 
 export type SealedCastReference = { id: string };
 
+export type SealedCastPublicMetadata = {
+  id: string;
+  creatorFid: string;
+  lockedMessage: string;
+};
+
 export type SealedCastAccessResponse =
   | {
       status: 'granted';
