@@ -50,13 +50,18 @@ export function TweetFeed({ feedOrdering, apiEndpoint }: TweetFeedProps) {
   );
   const hasMore = !!pages?.[size - 1]?.result?.tweets.length;
 
-  // Fetch new tweets every 20 seconds
+  // Check occasionally for new casts without spending provider credits on a
+  // constant background poll while the tab is open.
   const { data: newPage } = useSWR<TweetsResponse>(
     !!pages && timelineCursor && feedOrdering === 'latest'
-      ? `${apiEndpoint}&cursor=${timelineCursor.toISOString()}&limit=100&after=true`
+      ? `${apiEndpoint}&cursor=${timelineCursor.toISOString()}&limit=10&after=true`
       : null,
     null,
-    { refreshInterval: 10_000 }
+    {
+      refreshInterval: 300_000,
+      refreshWhenHidden: false,
+      revalidateOnFocus: false
+    }
   );
 
   const onShowNewTweets = () => {

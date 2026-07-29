@@ -10,7 +10,6 @@ import Link from 'next/link';
 import { MoreSettings } from './more-settings';
 import { SidebarLink } from './sidebar-link';
 import { SidebarProfile } from './sidebar-profile';
-import { SyncView } from '@components/sync/sync-view';
 
 export type NavLink = {
   href: string;
@@ -131,7 +130,6 @@ export function Sidebar(): JSX.Element {
         </section>
         {!isMobile && (user?.keyPair || user?.neynarSignerUuid) && (
           <div className='flex flex-col gap-4'>
-            {user.keyPair && <SyncView userId={user.id} />}
             <SidebarProfile />
           </div>
         )}

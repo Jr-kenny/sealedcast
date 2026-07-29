@@ -32,7 +32,6 @@ services:
       - ${SEALEDCAST_ENV_FILE:-.env.production}
     environment:
       DATABASE_URL: postgresql://indexer:${POSTGRES_PASSWORD}@postgres:5432/indexer
-      INDEXER_API_URL: http://lazy-indexer:3005
       HOSTNAME: 0.0.0.0
       PORT: 3000
     expose:
@@ -40,8 +39,6 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-      lazy-indexer:
-        condition: service_started
     healthcheck:
       test:
         - CMD
@@ -77,6 +74,8 @@ services:
       - sealedcast
 
   lazy-indexer:
+    profiles:
+      - legacy-indexer
     image: stephancill/lazy-indexer
     restart: unless-stopped
     env_file:
@@ -102,6 +101,8 @@ services:
       - sealedcast
 
   hub-proxy:
+    profiles:
+      - legacy-indexer
     image: caddy:2.10-alpine
     restart: unless-stopped
     env_file:
