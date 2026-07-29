@@ -14,18 +14,24 @@ export function SEO({
   description
 }: MainLayoutProps): JSX.Element {
   const { asPath } = useRouter();
+  const absoluteImage = image
+    ? new URL(image, siteURL || 'http://localhost:3000').toString()
+    : undefined;
+  const canonicalUrl = `${siteURL}${asPath === '/' ? '' : asPath}`;
 
   return (
     <Head>
       <title>{title}</title>
-      <meta name='og:title' content={title} />
+      <meta property='og:title' content={title} />
+      <meta property='og:type' content='website' />
       {description && <meta name='description' content={description} />}
-      {description && <meta name='og:description' content={description} />}
-      {image && <meta property='og:image' content={image} />}
-      <meta
-        name='og:url'
-        content={`${siteURL}${asPath === '/' ? '' : asPath}`}
-      />
+      {description && <meta property='og:description' content={description} />}
+      {absoluteImage && <meta property='og:image' content={absoluteImage} />}
+      <meta property='og:url' content={canonicalUrl} />
+      <meta name='twitter:card' content='summary_large_image' />
+      <meta name='twitter:title' content={title} />
+      {description && <meta name='twitter:description' content={description} />}
+      {absoluteImage && <meta name='twitter:image' content={absoluteImage} />}
     </Head>
   );
 }

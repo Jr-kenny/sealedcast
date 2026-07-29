@@ -45,9 +45,15 @@ export function useSealedCastAccess(
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(authorization)
         });
-        const body = (await response.json()) as
-          | SealedCastAccessResponse
-          | { error: string };
+        const responseText = await response.text();
+        let body: SealedCastAccessResponse | { error: string };
+        try {
+          body = JSON.parse(responseText) as
+            | SealedCastAccessResponse
+            | { error: string };
+        } catch {
+          throw new Error('Private access check is temporarily unavailable');
+        }
         if (!response.ok || 'error' in body) {
           throw new Error('error' in body ? body.error : 'Access check failed');
         }

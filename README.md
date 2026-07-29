@@ -52,14 +52,15 @@ license, and a summary of the privacy features added here.
 ### Ethereum Sepolia deployment
 
 The live SealedCast registry is deployed on Ethereum Sepolia at
-[`0xd9067eaa6905dd7ec9ed037d835881a24a92e107`](https://sepolia.etherscan.io/address/0xd9067eaa6905dd7ec9ed037d835881a24a92e107).
+[`0xbc16dec22be4b109dab6a830b32c95549e2e6cda`](https://sepolia.etherscan.io/address/0xbc16dec22be4b109dab6a830b32c95549e2e6cda).
 Its deployment transaction is
-[`0x37ad645ec0ca3a61e87a7a8ea4121f138aab6d65594b7f102130105be4471c0e`](https://sepolia.etherscan.io/tx/0x37ad645ec0ca3a61e87a7a8ea4121f138aab6d65594b7f102130105be4471c0e).
+[`0xc8410ea9c02484269f8dbd2ffa0fd705b6b47710ddd5e0db0267a215f748c894`](https://sepolia.etherscan.io/tx/0xc8410ea9c02484269f8dbd2ffa0fd705b6b47710ddd5e0db0267a215f748c894).
 
 ```bash
 export SEPOLIA_RPC_URL="https://..."
 export DEPLOYER_PRIVATE_KEY="0x..."
 export WALLET_VERIFIER_ADDRESS="0x..."
+export FIRST_CAST_ID="1"
 npm --prefix packages/contracts run deploy:sepolia
 ```
 

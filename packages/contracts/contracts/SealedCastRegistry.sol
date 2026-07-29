@@ -33,7 +33,7 @@ contract SealedCastRegistry is EIP712 {
 
     address public owner;
     address public walletVerifier;
-    uint256 public nextCastId = 1;
+    uint256 public nextCastId;
     mapping(uint256 => address) public farcasterControllers;
     mapping(uint256 => uint256) public bindingNonces;
     mapping(uint256 => mapping(address => uint256)) public accessNonces;
@@ -58,10 +58,11 @@ contract SealedCastRegistry is EIP712 {
     error CastNotFound();
     error CastAlreadyExists();
 
-    constructor(address verifier) EIP712("SealedCastRegistry", "1") {
-        if (verifier == address(0)) revert InvalidInput();
+    constructor(address verifier, uint256 firstCastId) EIP712("SealedCastRegistry", "1") {
+        if (verifier == address(0) || firstCastId == 0) revert InvalidInput();
         owner = msg.sender;
         walletVerifier = verifier;
+        nextCastId = firstCastId;
     }
 
     modifier onlyController(uint256 fid) {
@@ -90,6 +91,7 @@ contract SealedCastRegistry is EIP712 {
         if (block.timestamp > expiry) revert AttestationExpired();
 
         euint256 wallet = Nox.fromExternal(encryptedWallet, handleProof);
+        Nox.allowThis(wallet);
         bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(
             WALLET_BINDING_TYPEHASH,
             fid,
@@ -135,7 +137,9 @@ contract SealedCastRegistry is EIP712 {
         castData.publicHint = publicHint;
         castData.requirementIsPublic = requirementIsPublic;
         castData.policyHash = policyHash;
-        castData.encryptedContentKey = Nox.fromExternal(encryptedContentKey, contentKeyProof);
+        euint256 contentKey = Nox.fromExternal(encryptedContentKey, contentKeyProof);
+        Nox.allowThis(contentKey);
+        castData.encryptedContentKey = contentKey;
         castData.exists = true;
         emit SealedCastCreated(castId, farcasterCastHash, msg.sender);
     }
