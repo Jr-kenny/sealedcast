@@ -36,7 +36,11 @@ export default function TweetId(): JSX.Element {
     setEnabled(true);
   }, []);
 
-  const { data: tweetData, isValidating: tweetLoading } = useSWR(
+  const {
+    data: tweetData,
+    error: tweetError,
+    isValidating: tweetLoading
+  } = useSWR<TweetResponse['result'], Error>(
     id ? `/api/tweet/${id}${user?.id ? `?viewer_fid=${user.id}` : ''}` : null,
     async (url) => (await fetchJSON<TweetResponse>(url)).result
   );
@@ -87,6 +91,17 @@ export default function TweetId(): JSX.Element {
       <section>
         {tweetLoading && !tweetData ? (
           <Loading className='mt-5' />
+        ) : tweetError ? (
+          <>
+            <SEO title='Cast unavailable / SealedCast' />
+            <Error
+              message={
+                tweetError instanceof Error
+                  ? tweetError.message
+                  : 'Cast is temporarily unavailable'
+              }
+            />
+          </>
         ) : !(tweetWithPopulatedUsers && tweetData) ? (
           <>
             <SEO title='Cast not found / SealedCast' />
