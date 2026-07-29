@@ -22,6 +22,7 @@ import {
 } from '@lib/discord/token-crypto';
 import { decryptIdentityValue } from './identity-crypto';
 import { validateSealedAccessPolicy } from './policy';
+import { getNeynarUser } from '@lib/neynar';
 
 const BALANCE_ABI = [
   {
@@ -165,30 +166,21 @@ async function evaluateRule(
           Date.now() - discordCreatedAt(discord.userId) >=
             Number(rule.minDays) * 86_400_000
       );
-    case 'farcaster-following':
-      return Boolean(
-        await prisma.links.findFirst({
-          where: {
-            fid,
-            target_fid: BigInt(rule.targetFid),
-            type: 'follow',
-            deleted_at: null
-          }
-        })
-      );
+    case 'farcaster-following': {
+      const target = await getNeynarUser(rule.targetFid, fid.toString());
+      return target?.viewerFollowing ?? false;
+    }
     case 'farcaster-account-age': {
-      const account = await prisma.fids.findUnique({ where: { fid } });
+      const account = await getNeynarUser(fid.toString());
       return Boolean(
         account &&
-          Date.now() - account.registered_at.getTime() >=
+          Date.now() - account.createdAt.getTime() >=
             Number(rule.minDays) * 86_400_000
       );
     }
-    case 'farcaster-followers':
-      return (
-        (await prisma.links.count({
-          where: { target_fid: fid, type: 'follow', deleted_at: null }
-        })) >= Number(rule.minFollowers)
-      );
+    case 'farcaster-followers': {
+      const account = await getNeynarUser(fid.toString());
+      return (account?.followerCount ?? 0) >= Number(rule.minFollowers);
+    }
   }
 }

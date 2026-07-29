@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: SealedCast persistent backend host for the Farcaster indexer, PostgreSQL, Redis, and API
+Description: SealedCast persistent backend host for the API, PostgreSQL, Redis, and Nox relayer
 
 Parameters:
   VpcId:
